@@ -3,8 +3,6 @@ import logging
 import time
 
 from FLI.camera import USBCamera
-#from chimera.instruments.fli.flidrv.camera import USBCamera
-#from FLI.filter_wheel import USBFilterWheel
 
 from chimera.instruments.camera import CameraBase
 
