@@ -28,6 +28,17 @@ class FLI(CameraBase):
         Uses the python fli bindings to the FLI provided library.
     """
 
+    #    FIXME: Remove this...
+    #c.bitdepth              c.get_serial_number     c.set_exposure
+    #c.dev_name              c.get_temperature       c.set_flushes
+    #c.fetch_image           c.hbin                  c.set_image_area
+    #c.find_devices          c.locate_device         c.set_image_binning
+    #c.get_cooler_power      c.model                 c.set_temperature
+    #c.get_exposure_timeleft c.read_CCD_temperature  c.start_exposure
+    #c.get_image_size        c.read_base_temperature c.take_photo
+    #c.get_info              c.set_bitdepth          c.vbin
+
+
     # Some of the config values were taken from the specs for the cam & CCD.
     __config__ = {"device": "USB",
                   "ccd": CCD.IMAGING,
@@ -70,7 +81,7 @@ class FLI(CameraBase):
         self._cams = USBCamera.find_devices()
         if self._cams == []:
             self.log.critical('No devices on USB bus! Exit...')
-            return None
+            raise
         # While we're at it, let's assume there's only one camera on the
         # USB bus...
         self.thecam = self._cams[0]
@@ -107,7 +118,7 @@ class FLI(CameraBase):
             :return: set with values.
             :rtype: int
         """
-        return (self.width, self.height)
+        return self.width, self.height
 
     def getWindow(self):
         return [0, 0, self.width, self.height]
@@ -129,7 +140,7 @@ class FLI(CameraBase):
             :return: True if successful, False otherwise.
             :rtype: bool
         """
-        pass
+        self.thecam.set_temperature(tempC)
 
     def stopCooling(self):
         """
@@ -264,6 +275,7 @@ class FLI(CameraBase):
             # It seems the bitdepth from the API is buggy... We leave it at
             # its 16bit default. Next!
         else:
+            #FIXME: kwargs are not defined on def.
             # exptime translation
             exptime = int(kwargs['exptime'])
             # ftype translation; onli dark and normal!
@@ -282,12 +294,8 @@ class FLI(CameraBase):
         self.thecam.set_flushes(1)
         self.log.debug('Setting binning of the CCD to %ix%i...' % (hbin, vbin))
         self.thecam.set_image_binning(hbin, vbin)
-        self.log.debug(
-            'Setting exposure time to %f and frametype to %s...' % (exptime, ftype))
+        self.log.debug('Setting exposure time to %f and frametype to %s...' % (exptime, ftype))
         self.thecam.set_exposure(exptime * 1000, ftype)  # miliseconds
-        # self.log.debug(request)
-        # Signal the event
-        # return 0
 
         self.exposeBegin(request)
         # All set up, shoot. This method returns immediately.
@@ -306,7 +314,7 @@ class FLI(CameraBase):
 
             # [ABORT POINT]
             if self.abort.isSet():
-                # [TIAGO] Need to do some cleaning at camera level?
+                # TODO: [TIAGO] Need to do some cleaning at camera level?
                 status = CameraStatus.ABORTED
                 break
             elif ((time.time() - timestart) > 2.0 * exptime):
@@ -315,7 +323,7 @@ class FLI(CameraBase):
                 break
             # this sleep is EXTREMELY important: without it, Python would stuck
             # on this thread and abort will not work.
-            time.sleep(5.0)
+            time.sleep(5.0)  # FIXME: [William] Check this. 5s after an exposure? Too much, no?
 
         self.exposeComplete(request, status)
         return True
@@ -325,16 +333,12 @@ class FLI(CameraBase):
 
     def _readout(self, imageRequest):
 
-        (mode, binning, top,  left,
-         width, height) = self._getReadoutModeInfo(imageRequest["binning"],
-                                                   imageRequest["window"])
+        (mode, binning, top,  left, width, height) = self._getReadoutModeInfo(imageRequest["binning"],
+                                                                              imageRequest["window"])
         # readout
-        #img = N.zeros((height, width), N.int32)
-
         self.readoutBegin(imageRequest)
 
-        # [TIAGO] : I think this function must be either thread/locked
-        # or re-writed so that it enables chimera to abort.
+        # TODO: [TIAGO] : I think this function must be either thread/locked or re-writed so that it enables chimera to abort.
         img = self.thecam.fetch_image()
 
         proxy = self._saveImage(imageRequest, img,
@@ -343,7 +347,7 @@ class FLI(CameraBase):
                                  "binning_factor": self._binning_factors[binning]})
 
         self.log.debug('Sleeping for 5 seconds so camera can recover...')
-        time.sleep(5)
+        time.sleep(5)   # FIXME: [William] Check these 5s sleeps
         self.readoutComplete(proxy, CameraStatus.OK)
         return proxy
 
@@ -367,6 +371,7 @@ class FLI(CameraBase):
     def isExposing(self):
         return not (self.thecam.get_exposure_timeleft() == 0)
 
+    # TODO: FITS HEADER PART
     # Header
     # def getMetadata(self, request):
     #     return [
