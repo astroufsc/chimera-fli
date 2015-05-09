@@ -2,13 +2,12 @@ from __future__ import print_function
 import logging
 import time
 
-from FLI.camera import USBCamera
+from FLI import USBCamera, USBFilterWheel
 
 from chimera.instruments.camera import CameraBase
+from chimera.instruments.filterwheel import FilterWheelBase
 
-from chimera.interfaces.camera import (CCD, CameraFeature,
-                                       ReadoutMode,
-                                       CameraStatus)
+from chimera.interfaces.camera import CCD, CameraFeature, ReadoutMode, CameraStatus
 
 from chimera.core.lock import lock
 
@@ -17,7 +16,7 @@ import datetime as dt
 log = logging.getLogger(__name__)
 
 
-class FLI(CameraBase):
+class FLI(CameraBase, FilterWheelBase):
 
     """
     .. class:: FLI(CameraBase)
@@ -51,7 +50,7 @@ class FLI(CameraBase):
     def __init__(self):
         """Constructor."""
         CameraBase.__init__(self)
-        # FilterWheelBase.__init__(self)
+        FilterWheelBase.__init__(self)
 
         self.mode = 0
         self._supports = {CameraFeature.TEMPERATURE_CONTROL: True,
@@ -102,6 +101,11 @@ class FLI(CameraBase):
         readoutMode.pixelHeight = self.pixelHeight
         self._readoutModes = {self._MY_CCD:
                               {self._MY_READOUT_MODE: readoutMode}}
+
+        # Filter wheel init
+        self._wheels = USBFilterWheel.find_devices()
+        self.thewheel = self._wheels[0]
+        self['filter_wheel_model'] = self.thewheel.model
 
     def __stop__(self):
         pass
@@ -315,7 +319,7 @@ class FLI(CameraBase):
                 # TODO: [TIAGO] Need to do some cleaning at camera level?
                 status = CameraStatus.ABORTED
                 break
-            elif ((time.time() - timestart) > 2.0 * exptime):
+            elif (time.time() - timestart) > 2.0 * exptime:
                 self.log.warning('Exposure timed-out')
                 status = CameraStatus.ABORTED
                 break
@@ -369,17 +373,17 @@ class FLI(CameraBase):
     def isExposing(self):
         return not (self.thecam.get_exposure_timeleft() == 0)
 
-    # TODO: FITS HEADER PART
-    # Header
-    # def getMetadata(self, request):
-    #     return [
-    #             ('FWHEEL', str(self['filter_wheel_model']), 'FilterWheel Model'),
-    #             ('FILTER', str(self.getFilter()),
-    #              'Filter used for this observation')
-    #             ]
-
     def supports(self, feature=None):
         if feature in self._supports:
             return self._supports[feature]
         else:
             return False
+
+    # Filter Wheel Control
+    @lock
+    def setFilter(self, f):
+        return self.thewheel.set_filter_pos(self._getFilterPosition(f))
+
+    def getFilter(self):
+        return self._getFilterName(self.thewheel.get_filter_pos())
+
