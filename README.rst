@@ -18,7 +18,7 @@ our tests.
 ::
 
     pip install -U git+https://github.com/astroufsc/python-FLI.git
-    pip install -U git+https://github.com/astroufsc/chimera_template.git
+    pip install -U git+https://github.com/astroufsc/chimera_fli.git
 
 
 Configuration Example
