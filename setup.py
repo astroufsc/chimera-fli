@@ -1,13 +1,13 @@
 from distutils.core import setup
 
 setup(
-    name='chimera_template',
+    name='chimera_fli',
     version='0.0.1',
-    packages=['chimera_template', 'chimera_template.instruments', 'chimera_template.controllers'],
+    packages=['chimera_fli', 'chimera_fli.instruments'],
     scripts=[],
-    url='http://github.com/astroufsc/chimera_template',
+    url='http://github.com/astroufsc/chimera_fli',
     license='GPL v2',
     author='William Schoenell',
     author_email='william@iaa.es',
-    description='Template for chimera plugins'
+    description='Chimera plugin for Finger Lakes Instrumentation CCD cameras'
 )

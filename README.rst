@@ -1,56 +1,44 @@
-chimera_template plugin
-=======================
+chimera_fli plugin
+==================
 
-This is a template plugin for the chimera observatory control system
-https://github.com/astroufsc/chimera.
+A chimera_ plugin for `Finger Lakes Instrumentation`_ cameras and filter wheels.
 
 Usage
 -----
 
-Rename chimera_template for your plugin name. It is important that the plugin
-name must start with chimera\_ to be found by chimera. Instruments and
-controllers must follow the standard ``chimera_(plugin_name)/(instruments|controllers)/(plugin).py``
-
-The class inside ``(plugin).py`` should be named Plugin (with CamelCase letters).
-
-For more info: https://github.com/astroufsc/chimera/blob/master/docs/site/chimerafordevs.rst#chimera-objects
-
+Install chimera_ on your computer, and then, this package. Edit the configuration like the example below. The type of
+the ``camera`` instrument section should be ``FLI``.
 
 Installation
 ------------
 
-Installation instructions. Dependencies, etc...
+This package depends on python-FLI_ package. We strongly suggest to use `our fork`_ of it, which is the one we use on
+our tests.
 
 ::
 
-   pip install -U chimera_template
-
-or
-
-::
-
+    pip install -U git+https://github.com/astroufsc/python-FLI.git
     pip install -U git+https://github.com/astroufsc/chimera_template.git
 
 
 Configuration Example
 ---------------------
 
-Here goes an example of the configuration to be added on ``chimera.config`` file.
+``chimera.config`` for a FLI camera with a filter wheel with a set of 5 SLOAN filters.
 
 ::
 
-    instrument:
-        name: model
-        type: Example
+    camera:
+      name: fli
+      type: FLI
+      filters: u g r i z
 
-
-Tested Hardware (for instruments)
----------------------------------
+Tested Hardware
+---------------
 
 This plugin was tested on these hardware:
 
-* Hardware example 1, model 2
-* Hardware example 2, model 3
+*  FLI ProLine PL4720 camera with FLI CenterLine CL-1-20 Filter Wheel
 
 
 Contact
@@ -60,4 +48,9 @@ For more information, contact us on chimera's discussion list:
 https://groups.google.com/forum/#!forum/chimera-discuss
 
 Bug reports and patches are welcome and can be sent over our GitHub page:
-https://github.com/astroufsc/chimera_template/
+https://github.com/astroufsc/chimera_fli/
+
+.. _Finger Lakes Instrumentation: http://www.flicamera.com/
+.. _chimera: https://github.com/astroufsc/chimera
+.. _python-FLI: https://github.com/cversek/python-FLI
+.. _our fork: https://github.com/astroufsc/python-FLI
