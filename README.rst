@@ -1,4 +1,4 @@
-chimera_fli plugin
+chimera-fli plugin
 ==================
 
 A chimera_ plugin for `Finger Lakes Instrumentation`_ cameras and filter wheels.
@@ -18,7 +18,7 @@ our tests.
 ::
 
     pip install -U git+https://github.com/astroufsc/python-FLI.git
-    pip install -U git+https://github.com/astroufsc/chimera_fli.git
+    pip install -U git+https://github.com/astroufsc/chimera-fli.git
 
 
 Configuration Example
@@ -48,7 +48,7 @@ For more information, contact us on chimera's discussion list:
 https://groups.google.com/forum/#!forum/chimera-discuss
 
 Bug reports and patches are welcome and can be sent over our GitHub page:
-https://github.com/astroufsc/chimera_fli/
+https://github.com/astroufsc/chimera-fli/
 
 .. _Finger Lakes Instrumentation: http://www.flicamera.com/
 .. _chimera: https://github.com/astroufsc/chimera
