@@ -39,12 +39,10 @@ class FLI(CameraBase, FilterWheelBase):
     # Some of the config values were taken from the specs for the cam & CCD.
     __config__ = {"device": "USB",
                   "ccd": CCD.IMAGING,
-                  "temp_delta": 2.0,
-                  "ccd_saturation_level": 100000,
+                  "ccd_saturation_level": None,
                   "camera_model": "Finger Lakes Instrumentation PL4240",
                   "ccd_model": "E2V CCD42-40",
-                  "telescope_focal_length": 80000,  # milimeter
-                  "gain": 1
+                  "telescope_focal_length": None,  # milimeter
                   }
 
     def __init__(self):
@@ -55,33 +53,44 @@ class FLI(CameraBase, FilterWheelBase):
         self.mode = 0
         self._supports = {CameraFeature.TEMPERATURE_CONTROL: True,
                           CameraFeature.PROGRAMMABLE_GAIN: False,
-                          CameraFeature.PROGRAMMABLE_OVERSCAN: True,
+                          CameraFeature.PROGRAMMABLE_OVERSCAN: False,
                           CameraFeature.PROGRAMMABLE_FAN: True,
                           CameraFeature.PROGRAMMABLE_LEDS: True,
                           CameraFeature.PROGRAMMABLE_BIAS_LEVEL: False}
 
         # my internal CCD code
         self._MY_CCD = 1 << 1
-        self._MY_ADC = 1 << 2
-        self._MY_READOUT_MODE = 1 << 3
 
         self._ccds = {self._MY_CCD: CCD.IMAGING}
 
-        self._adcs = {"12 bits": self._MY_ADC}
+        self._adcs = {"12 bits": 0}
 
-        self._binnings = {"1x1": self._MY_READOUT_MODE}
+        self._binnings = {"1x1": 0,
+                          "2x2": 1,
+                          "3x3": 2,
+                          "9x9": 9}
 
-        self._binning_factors = {"1x1": 1}
+        self._binning_factors = {"1x1": 1,
+                                 "2x2": 2,
+                                 "3x3": 3,
+                                 "9x9": 9}
+
+        self._setpoint = 0
 
         # Kludge: this is a camera class, let's assume we're talking to a
         # camera!
         self._cams = USBCamera.find_devices()
-        if self._cams == []:
+        if not self._cams:
             self.log.critical('No devices on USB bus! Exit...')
             raise
         # While we're at it, let's assume there's only one camera on the
         # USB bus...
         self.thecam = self._cams[0]
+
+        # FLI API does not haves fan speed read. So, always start chimera with fans and cooling stopped.
+        self.startFan()
+        self.stopCooling()
+
         # This will provide the following dict pairs:
         # 'serial_number', 'hardware_rev', 'firmware_rev', 'pixel_size',
         # 'array_area', 'visible_area'.
@@ -92,15 +101,16 @@ class FLI(CameraBase, FilterWheelBase):
         self.pixelWidth, self.pixelHeight = self.info['pixel_size']
         self.log.info('Camera: %s', self.info)
 
-        readoutMode = ReadoutMode()
-        readoutMode.mode = 0
-        readoutMode.gain = 1.0
-        readoutMode.width = self.width
-        readoutMode.height = self.height
-        readoutMode.pixelWidth = self.pixelWidth
-        readoutMode.pixelHeight = self.pixelHeight
-        self._readoutModes = {self._MY_CCD:
-                              {self._MY_READOUT_MODE: readoutMode}}
+        self._readoutModes = {self._MY_CCD: {}}
+        for i_mode, mode in enumerate(self._binnings):
+            vbin, hbin = [int(v) for v in mode.split('x')]
+            readoutMode = ReadoutMode()
+            readoutMode.mode = i_mode
+            readoutMode.width = self.width/hbin
+            readoutMode.height = self.height/vbin
+            readoutMode.pixelWidth = self.pixelWidth*hbin
+            readoutMode.pixelHeight = self.pixelHeight*vbin
+            self._readoutModes[self._MY_CCD].update({i_mode: readoutMode})
 
         # Filter wheel init
         self._wheels = USBFilterWheel.find_devices()
@@ -142,18 +152,21 @@ class FLI(CameraBase, FilterWheelBase):
             :return: True if successful, False otherwise.
             :rtype: bool
         """
+        self._setpoint = tempC
         self.thecam.set_temperature(tempC)
+        return True
 
     def stopCooling(self):
         """
         .. method:: stopCooling()
 
-            Stop cooling the camera
+            Stop cooling the camera by setting the temperature threshold to 60 degC
 
             :return: True if successful, False otherwise.
             :rtype: bool
         """
-        pass
+        self.thecam.set_temperature(60)
+        return True
 
     def isCooling(self):
         """
@@ -161,10 +174,15 @@ class FLI(CameraBase, FilterWheelBase):
 
             Returns whether the camera is currently cooling.
 
-            :return: True if cooling, False otherwise.
-            :rtype: bool
+            Find out by means of querying the power consumption of the
+            camera's cooler.
+
+        .. note:: this is flagged as an "undocumented API function"!
         """
-        pass
+        if self.thecam.get_cooler_power() == 0:  # In Watts
+            return False
+        else:
+            return True
 
     @lock
     def getTemperature(self):
@@ -187,29 +205,27 @@ class FLI(CameraBase, FilterWheelBase):
             :return: The current camera temperature SetPoint in degrees Celsius.
             :rtype: float
         """
-        pass
+        return self._setpoint
 
     def startFan(self, rate=None):
-        pass
+        self._isfanning = True
+        self.thecam.start_fan()
+        return True
 
     def stopFan(self):
-        pass
+        self._isfanning = False
+        self.thecam.stop_fan()
+        return True
 
     def isFanning(self):
         """
         .. method:: isFanning()
 
-            Find out by means of querying the power consumption of the
-            camera's cooler.
+        FIXME: _isFanning starts with False and changes to True when we enable the fans.
+        There is still no way to query this info from the API :-(
 
-        .. note:: this is flagged as an "undocumented API function"!
         """
-        # We might need this info one day...
-        watts = self.thecam.get_cooler_power()
-        if watts == 0:
-            return False
-        else:
-            return True
+        return self._isfanning
 
     def getCCDs(self):
         '''
@@ -230,8 +246,7 @@ class FLI(CameraBase, FilterWheelBase):
     def getPhysicalSize(self):
         return self.width, self.height
 
-    def getOverscanSize(self):
-        # Provisory
+    def getOverscanSize(self, ccd=None):
         return 0, 0
 
     def getReadoutModes(self):
@@ -272,6 +287,8 @@ class FLI(CameraBase, FilterWheelBase):
             # Is this the correct order?
             if request['binning']:
                 hbin, vbin = request['binning'].split('x')
+                hbin = int(hbin)
+                vbin = int(hbin)
             else:
                 hbin, vbin = 1, 1
             # It seems the bitdepth from the API is buggy... We leave it at
