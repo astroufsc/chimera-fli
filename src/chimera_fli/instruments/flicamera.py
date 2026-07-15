@@ -1,6 +1,6 @@
 # SPDX-FileCopyrightText: 2014-present William Schoenell <wschoenell@gmail.com>
 # SPDX-License-Identifier: GPL-2.0-or-later
-"""Driver for Finger Lakes Instrumentation CCD cameras and filter wheels.
+"""Driver for Finger Lakes Instrumentation CCD cameras.
 
 Uses the python-FLI ctypes bindings to the FLI-provided library.
 """
@@ -10,17 +10,21 @@ import time
 
 from chimera.core.lock import lock
 from chimera.instruments.camera import CameraBase
-from chimera.instruments.filterwheel import FilterWheelBase
 from chimera.interfaces.camera import CameraFeature, CameraStatus, ReadoutMode
 
+# importing chimera_fli.fli loads libfli.so and fails if the FLI library
+# is not installed on the system
 try:
-    from FLI import USBCamera, USBFilterWheel
-except ImportError:
+    from chimera_fli.fli import USBCamera
+except (ImportError, OSError, RuntimeError):
     USBCamera = None
-    USBFilterWheel = None
+
+# Extra time allowed on top of the exposure time before an exposure is
+# considered stuck (covers bias/short frames, where 2 * exptime ~ 0).
+EXPOSE_TIMEOUT_MARGIN = 10.0  # seconds
 
 
-class FLI(CameraBase, FilterWheelBase):
+class FLICamera(CameraBase):
     # Some of the config values were taken from the specs for the cam & CCD.
     __config__ = {
         "device": "USB",
@@ -30,9 +34,7 @@ class FLI(CameraBase, FilterWheelBase):
 
     def __init__(self):
         CameraBase.__init__(self)
-        FilterWheelBase.__init__(self)
 
-        self.mode = 0
         self._supports = {
             CameraFeature.TEMPERATURE_CONTROL: True,
             CameraFeature.PROGRAMMABLE_GAIN: False,
@@ -52,7 +54,6 @@ class FLI(CameraBase, FilterWheelBase):
         self._isfanning = False
 
         self.thecam = None
-        self.thewheel = None
         self.info = {}
         self.width = None
         self.height = None
@@ -72,8 +73,8 @@ class FLI(CameraBase, FilterWheelBase):
 
         cams = USBCamera.find_devices()
         if not cams:
-            self.log.critical("No FLI devices on USB bus!")
-            raise RuntimeError("No FLI devices found on USB bus.")
+            self.log.critical("No FLI cameras on USB bus!")
+            raise RuntimeError("No FLI cameras found on USB bus.")
         # Assume there's only one camera on the USB bus...
         self.thecam = cams[0]
 
@@ -100,12 +101,6 @@ class FLI(CameraBase, FilterWheelBase):
             readout_mode.pixel_width = self.pixel_width * hbin
             readout_mode.pixel_height = self.pixel_height * vbin
             self._readout_modes[bin_id] = readout_mode
-
-        # Filter wheel init
-        wheels = USBFilterWheel.find_devices()
-        if wheels:
-            self.thewheel = wheels[0]
-            self["filter_wheel_model"] = self.thewheel.model
 
     def __stop__(self):
         pass
@@ -166,7 +161,7 @@ class FLI(CameraBase, FilterWheelBase):
 
     def _expose(self, request):
         ftype = "normal"
-        exptime = int(request["exptime"])
+        exptime = float(request["exptime"])
         self.log.debug(f"ImageRequest received: {request}")
         if request["type"] in ("bias", "dark"):
             ftype = "dark"
@@ -181,7 +176,7 @@ class FLI(CameraBase, FilterWheelBase):
         self.log.debug(f"Setting binning of the CCD to {hbin}x{vbin}...")
         self.thecam.set_image_binning(hbin, vbin)
         self.log.debug(f"Setting exposure time to {exptime} and frametype to {ftype}.")
-        self.thecam.set_exposure(exptime * 1000, ftype)  # milliseconds
+        self.thecam.set_exposure(int(exptime * 1000), ftype)  # milliseconds
 
         self.expose_begin(request)
         # All set up, shoot. This method returns immediately.
@@ -201,7 +196,7 @@ class FLI(CameraBase, FilterWheelBase):
             if self.abort.is_set():
                 status = CameraStatus.ABORTED
                 break
-            elif (time.time() - timestart) > 2.0 * exptime:
+            elif (time.time() - timestart) > 2.0 * exptime + EXPOSE_TIMEOUT_MARGIN:
                 self.log.warning("Exposure timed-out")
                 status = CameraStatus.ABORTED
                 break
@@ -239,11 +234,3 @@ class FLI(CameraBase, FilterWheelBase):
 
     def supports(self, feature=None):
         return self._supports.get(feature, False)
-
-    # Filter Wheel Control
-    @lock
-    def set_filter(self, f):
-        return self.thewheel.set_filter_pos(self._get_filter_position(f))
-
-    def get_filter(self):
-        return self._get_filter_name(self.thewheel.get_filter_pos())

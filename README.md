@@ -23,15 +23,35 @@ Add the following to your `chimera.config` file:
 
 ```yaml
 instruments:
-    - name: fli
-      type: FLI
+    - name: camera
+      type: FLICamera
       device: USB
       camera_model: Finger Lakes Instrumentation PL4240
       ccd_model: E2V CCD42-40
+
+    - name: wheel
+      type: FLIFilterWheel
+      device: USB          # or a device name/serial number to pin one wheel
+      filters: U B V R I
+      move_timeout: 30     # optional, seconds to wait for a move to finish
 ```
 
-Requires the FLI SDK library and the [python-FLI](https://github.com/cversek/python-FLI)
-bindings installed on the system.
+The camera and the filter wheel are independent instruments, so deployments
+with only one of the two devices can configure just that section.
+
+The filter wheel automatically reconnects (three attempts with increasing
+delays) when the USB device drops mid-call (EPIPE), and polls the wheel until
+the motor stops, since the FLI SDK documents `FLISetFilterPos` as possibly
+returning while the wheel is still moving.
+
+If `libfli.so` lives outside the default linker paths, point the
+`FLI_SDK_PATH` environment variable at it. See `docs/summary.md` for the
+FLI SDK API reference used by the vendored bindings.
+
+Requires the FLI SDK library (`libfli.so`, packaged as `libfli2` on Debian)
+installed on the system. The Python bindings from
+[python-FLI](https://github.com/cversek/python-FLI) are vendored into this
+package (`chimera_fli.fli`), ported to Python 3.
 
 
 
