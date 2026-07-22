@@ -8,9 +8,7 @@ Uses the vendored FLI ctypes bindings to the FLI-provided library.
 import time
 
 from chimera.core.exceptions import ChimeraException
-from chimera.core.lock import lock
 from chimera.instruments.filterwheel import FilterWheelBase
-from chimera.interfaces.filterwheel import InvalidFilterPositionException
 
 # importing chimera_fli.fli loads libfli.so and fails if the FLI library
 # is not installed on the system
@@ -71,6 +69,8 @@ class FLIFilterWheel(FilterWheelBase):
                 f"configuration lists {len(self.get_filters())}."
             )
 
+        FilterWheelBase.__start__(self)  # validates the focus offset table
+
     def _select_wheel(self, wheels):
         wanted = str(self["device"])
         if wanted in ("", "USB"):
@@ -121,19 +121,7 @@ class FLIFilterWheel(FilterWheelBase):
             f"FLI filter wheel still moving after {self['move_timeout']} seconds."
         )
 
-    @lock
-    def set_filter(self, filter):
-        filter_name = str(filter)
-
-        if filter_name not in self.get_filters():
-            raise InvalidFilterPositionException(f"Invalid filter {filter}.")
-
-        try:
-            old_filter = self.get_filter()
-        except ChimeraException:
-            # wheel position unknown (e.g. right after power-up)
-            old_filter = None
-
+    def _set_filter(self, filter_name):
         position = self._get_filter_position(filter_name)
 
         self.thewheel.lock()
@@ -145,9 +133,6 @@ class FLIFilterWheel(FilterWheelBase):
                 self.thewheel.unlock()
             except FLIError:
                 pass
-
-        self.filter_change(filter_name, old_filter)
-        return True
 
     def get_filter(self):
         position = self._with_reconnect(self.thewheel.get_filter_pos)
