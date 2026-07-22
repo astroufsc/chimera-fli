@@ -4,7 +4,10 @@
 
 import pytest
 from chimera.core.exceptions import ChimeraException
-from chimera.interfaces.filterwheel import InvalidFilterPositionException
+from chimera.interfaces.filterwheel import (
+    FocusOffsetException,
+    InvalidFilterPositionException,
+)
 
 from chimera_fli.instruments import flifilterwheel as mod
 from chimera_fli.instruments.flifilterwheel import FLIFilterWheel
@@ -178,3 +181,35 @@ def test_device_pinning_no_match(fake, events):
 def test_stop_closes_device(fw, fake):
     fw.__stop__()
     assert fake.closed
+
+
+def test_focus_offset_applied_on_filter_change(fake, events, monkeypatch):
+    moves = []
+
+    class FakeFocuser:
+        def move_in(self, n):
+            moves.append(-n)
+
+        def move_out(self, n):
+            moves.append(+n)
+
+    fw = FLIFilterWheel()
+    fw["filters"] = "U B V R I"
+    fw["focuser"] = "/FakeFocuser/0"
+    fw["focus_offsets"] = "U:-100 B:0 V:0 R:25"
+    monkeypatch.setattr(fw, "get_proxy", lambda url: FakeFocuser())
+    fw.__start__()
+
+    fw.set_filter("B")  # wheel starts on U, so back its -100 steps out
+
+    assert fake.pos == 1
+    assert moves == [+100]
+
+
+def test_bad_focus_offsets_fail_at_start(fake, events):
+    fw = FLIFilterWheel()
+    fw["filters"] = "U B V R I"
+    fw["focuser"] = "/FakeFocuser/0"
+    fw["focus_offsets"] = "NOSUCHFILTER:100"
+    with pytest.raises(FocusOffsetException):
+        fw.__start__()
